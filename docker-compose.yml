@@ -1,27 +1,72 @@
-elasticsearch:
-  image: elasticsearch:5.6.6
-  command: elasticsearch
-  environment:
-    - network.host=0.0.0.0
-  ports:
-    - "9200:9200"
-    - "9300:9300"
-logstash:
-  build: logstash/
-  command: logstash -f /etc/logstash/conf.d/logstash.conf
-  ports:
-    - "5000:5000"
-  links:
-    - elasticsearch
-    - rabbitmq
-kibana:
-  build: kibana/
-  ports:
-    - "5601:5601"
-  links:
-    - elasticsearch
-rabbitmq:
-  build: rabbitmq/
-  ports:
-    - "5672:5672"
-    - "15672:15672"
+version: "1.0"
+name: "dev12-env"
+services:
+  elasticsearch:
+    image: elasticsearch:8.8.1
+    command: elasticsearch
+    container_name: elasticsearch-container
+    environment:
+      - discovery.type=single-node
+      - ES_JAVA_OPTS=-Xms750m -Xmx750m
+      - xpack.security.enabled=false
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    networks:
+      - es-net
+  logstash:
+    build: ./logstash/
+    command: logstash -f /etc/logstash/conf.d/logstash.conf
+    container_name: logstash-container
+    ports:
+      - "5001:5000"
+    links:
+      - elasticsearch
+      - rabbitmq
+    networks:
+      - es-net
+  kibana:
+    container_name: kibana-container
+    image: kibana:8.8.1
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch-container:9200
+    depends_on:
+      - elasticsearch
+    ports:
+      - 5601:5601
+    networks:
+      - es-net
+  rabbitmq:
+    build: ./rabbitmq/
+    container_name: rabbitmq-container
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    networks:
+      - es-net
+  vault-server:
+    image: vault:1.13.3
+    container_name: vault-server-container
+    ports:
+      - "8200:8200"
+    environment:
+      VAULT_ADDR: "http://0.0.0.0:8200"
+      VAULT_DEV_ROOT_TOKEN_ID: "vault-plaintext-root-token"
+    cap_add:
+      - IPC_LOCK
+    networks:
+      - es-net
+  postgres:
+    image: postgres
+    container_name: postgres-container
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: "myuser"
+      POSTGRES_PASSWORD: "mysecretpassword"
+      POSTGRES_DB: "shopdb"
+    networks:
+      - es-net
+networks:
+  es-net:
+    driver: bridge
